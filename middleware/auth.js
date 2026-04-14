@@ -13,6 +13,7 @@ const JWT_SECRET = process.env.JWT_SECRET || (() => {
 
 const COOKIE_NAME = 'auth_token';
 const TOKEN_TTL_SECONDS = 8 * 60 * 60; // 8 hours
+const PENDING_2FA_TTL = 5 * 60;         // 5 minutes
 
 function signToken(user) {
   return jwt.sign(
@@ -74,4 +75,16 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { signToken, setAuthCookie, clearAuthCookie, requireAuth, requireAdmin, COOKIE_NAME };
+// Issue a short-lived token for the 2FA verification step
+function signPendingToken(userId) {
+  return jwt.sign({ id: userId, pending2fa: true }, JWT_SECRET, { expiresIn: PENDING_2FA_TTL });
+}
+
+// Verify a pending-2FA token; throws if invalid/expired
+function verifyPendingToken(token) {
+  const payload = jwt.verify(token, JWT_SECRET);
+  if (!payload.pending2fa) throw new Error('Not a pending-2FA token');
+  return payload;
+}
+
+module.exports = { signToken, setAuthCookie, clearAuthCookie, requireAuth, requireAdmin, signPendingToken, verifyPendingToken, COOKIE_NAME };

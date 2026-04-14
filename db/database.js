@@ -44,6 +44,10 @@ function initSchema() {
     );
   `);
 
+  // Migration: add 2FA columns if they don't already exist
+  try { db.exec('ALTER TABLE users ADD COLUMN totp_secret TEXT'); } catch {}
+  try { db.exec('ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0'); } catch {}
+
   // Seed the initial admin account if no admin exists
   const adminExists = db.prepare("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").get();
   if (!adminExists) {

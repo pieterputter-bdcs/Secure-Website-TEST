@@ -89,6 +89,20 @@
     button[type=submit]:hover  { background: var(--accent-h); }
     button[type=submit]:active { transform: scale(.99); }
 
+    .back-link {
+      display: block;
+      text-align: center;
+      margin-top: 1rem;
+      font-size: .875rem;
+      color: var(--muted);
+      cursor: pointer;
+      background: none;
+      border: none;
+      width: 100%;
+      padding: .25rem;
+    }
+    .back-link:hover { color: var(--text); }
+
     .alert {
       padding: .75rem 1rem;
       border-radius: 6px;
@@ -112,6 +126,33 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .loading .btn-text { display: none; }
     .loading .spinner  { display: inline-block; }
+
+    /* 2FA step */
+    .step-badge {
+      display: inline-block;
+      font-size: .75rem;
+      font-weight: 700;
+      background: rgba(59,130,246,.2);
+      color: var(--accent);
+      border: 1px solid rgba(59,130,246,.4);
+      border-radius: 4px;
+      padding: .15rem .5rem;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+    .totp-hint {
+      font-size: .8125rem;
+      color: var(--muted);
+      margin-bottom: 1.25rem;
+      line-height: 1.5;
+    }
+    #totpInput {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: .5rem;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -123,11 +164,12 @@
       <path d="M20 18l-6 6 6 6" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
     <h1>Unit Converter</h1>
-    <p>Sign in to access your account</p>
+    <p id="logoSubtitle">Sign in to access your account</p>
   </div>
 
   <div id="alert" class="alert" role="alert"></div>
 
+  <!-- Step 1: Username + Password -->
   <form id="loginForm" novalidate>
     <label for="username">Username</label>
     <input id="username" name="username" type="text" autocomplete="username"
@@ -142,9 +184,27 @@
       <span class="spinner"></span>
     </button>
   </form>
+
+  <!-- Step 2: 2FA Code (hidden until needed) -->
+  <div id="twoFaStep" style="display:none;">
+    <div class="step-badge">Step 2 of 2 — Two-Factor Authentication</div>
+    <p class="totp-hint">Open your authenticator app and enter the 6-digit code shown for <strong>Unit Converter</strong>.</p>
+    <form id="totpForm" novalidate>
+      <label for="totpInput">Authenticator Code</label>
+      <input id="totpInput" type="text" inputmode="numeric" pattern="\d{6}" maxlength="6"
+             placeholder="000000" autocomplete="one-time-code">
+      <button type="submit" id="totpBtn">
+        <span class="btn-text">Verify</span>
+        <span class="spinner"></span>
+      </button>
+    </form>
+    <button class="back-link" id="backBtn">← Back to login</button>
+  </div>
 </div>
 
 <script>
+  let pendingToken = null;
+
   // If already logged in, redirect
   (async () => {
     try {
@@ -156,18 +216,18 @@
     } catch {}
   })();
 
-  const form      = document.getElementById('loginForm');
-  const alertEl   = document.getElementById('alert');
-  const submitBtn = document.getElementById('submitBtn');
+  const alertEl = document.getElementById('alert');
 
   function showAlert(msg, type) {
     alertEl.textContent = msg;
     alertEl.className = `alert ${type} visible`;
   }
+  function clearAlert() { alertEl.className = 'alert'; }
 
-  form.addEventListener('submit', async (e) => {
+  // ── Step 1: Login ────────────────────────────────────────────────────────────
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    alertEl.className = 'alert';
+    clearAlert();
 
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value;
@@ -176,8 +236,9 @@
       return showAlert('Please enter your username and password.', 'error');
     }
 
-    submitBtn.classList.add('loading');
-    submitBtn.disabled = true;
+    const btn = document.getElementById('submitBtn');
+    btn.classList.add('loading');
+    btn.disabled = true;
 
     try {
       const res = await fetch('/api/auth/login', {
@@ -187,20 +248,88 @@
       });
       const data = await res.json();
 
-      if (res.ok) {
+      if (!res.ok) {
+        return showAlert(data.error || 'Login failed.', 'error');
+      }
+
+      if (data.requires2fa) {
+        // Switch to 2FA step
+        pendingToken = data.pendingToken;
+        document.getElementById('loginForm').style.display = 'none';
+        document.getElementById('twoFaStep').style.display = 'block';
+        document.getElementById('logoSubtitle').textContent = 'Two-factor authentication';
+        clearAlert();
+        document.getElementById('totpInput').focus();
+      } else {
         showAlert('Login successful! Redirecting…', 'success');
         setTimeout(() => {
           window.location.href = data.user.role === 'admin' ? '/admin' : '/converter';
         }, 600);
-      } else {
-        showAlert(data.error || 'Login failed.', 'error');
       }
     } catch {
       showAlert('Network error. Please try again.', 'error');
     } finally {
-      submitBtn.classList.remove('loading');
-      submitBtn.disabled = false;
+      btn.classList.remove('loading');
+      btn.disabled = false;
     }
+  });
+
+  // ── Step 2: 2FA verification ─────────────────────────────────────────────────
+  document.getElementById('totpForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearAlert();
+
+    const code = document.getElementById('totpInput').value.replace(/\s/g, '');
+    if (!code || code.length !== 6) {
+      return showAlert('Please enter the 6-digit code from your authenticator app.', 'error');
+    }
+
+    const btn = document.getElementById('totpBtn');
+    btn.classList.add('loading');
+    btn.disabled = true;
+
+    try {
+      const res = await fetch('/api/auth/2fa/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pendingToken, code }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        document.getElementById('totpInput').value = '';
+        document.getElementById('totpInput').focus();
+        return showAlert(data.error || 'Verification failed.', 'error');
+      }
+
+      showAlert('Verified! Redirecting…', 'success');
+      setTimeout(() => {
+        window.location.href = data.user.role === 'admin' ? '/admin' : '/converter';
+      }, 600);
+    } catch {
+      showAlert('Network error. Please try again.', 'error');
+    } finally {
+      btn.classList.remove('loading');
+      btn.disabled = false;
+    }
+  });
+
+  // Auto-submit when 6 digits are entered
+  document.getElementById('totpInput').addEventListener('input', function () {
+    this.value = this.value.replace(/\D/g, '').slice(0, 6);
+    if (this.value.length === 6) {
+      document.getElementById('totpForm').dispatchEvent(new Event('submit'));
+    }
+  });
+
+  // Back button
+  document.getElementById('backBtn').addEventListener('click', () => {
+    pendingToken = null;
+    document.getElementById('twoFaStep').style.display = 'none';
+    document.getElementById('loginForm').style.display = 'block';
+    document.getElementById('logoSubtitle').textContent = 'Sign in to access your account';
+    document.getElementById('totpInput').value = '';
+    clearAlert();
   });
 </script>
 </body>

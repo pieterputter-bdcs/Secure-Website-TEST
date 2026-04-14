@@ -20,7 +20,7 @@ function auditLog(actorId, actorName, action, targetId, targetName, detail) {
 // GET /api/admin/users  — list all users
 router.get('/users', (req, res) => {
   const users = getDb()
-    .prepare(`SELECT id, username, email, role, status, created_at, last_login
+    .prepare(`SELECT id, username, email, role, status, totp_enabled, created_at, last_login
               FROM users ORDER BY created_at DESC`)
     .all();
   res.json({ users });
@@ -176,6 +176,25 @@ router.post('/users/:id/reset-password', (req, res) => {
   auditLog(req.user.id, req.user.username, 'reset_password', targetId, target.username);
 
   res.json({ message: `Password for "${target.username}" has been reset` });
+});
+
+// POST /api/admin/users/:id/reset-2fa  — admin resets a user's 2FA
+router.post('/users/:id/reset-2fa', (req, res) => {
+  const targetId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(targetId)) {
+    return res.status(400).json({ error: 'Invalid user ID' });
+  }
+
+  const target = getDb().prepare('SELECT id, username, totp_enabled FROM users WHERE id = ?').get(targetId);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  if (!target.totp_enabled) {
+    return res.status(400).json({ error: 'This user does not have 2FA enabled' });
+  }
+
+  getDb().prepare('UPDATE users SET totp_secret = NULL, totp_enabled = 0 WHERE id = ?').run(targetId);
+  auditLog(req.user.id, req.user.username, 'reset_2fa', targetId, target.username);
+
+  res.json({ message: `2FA has been reset for "${target.username}"` });
 });
 
 // GET /api/admin/audit-log  — view audit log

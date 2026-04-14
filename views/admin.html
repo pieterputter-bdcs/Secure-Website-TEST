@@ -261,10 +261,59 @@
   <div class="nav-actions">
     <span class="nav-user">Signed in as <strong id="navUsername">…</strong></span>
     <a class="btn btn-outline" href="/converter">Converter</a>
+    <button class="btn btn-outline" id="securityBtn">🔒 Security</button>
     <button class="btn btn-outline" id="changePassBtn">Change Password</button>
     <button class="btn btn-danger" id="logoutBtn">Sign Out</button>
   </div>
 </nav>
+
+<!-- Security / 2FA Modal -->
+<div id="secModalOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:2rem;width:420px;max-width:95vw;">
+    <h3 style="margin-bottom:.5rem;">Security Settings</h3>
+    <p style="color:var(--muted);font-size:.875rem;margin-bottom:1.5rem;">Manage two-factor authentication for your account.</p>
+    <div id="secAlert" style="display:none;padding:.75rem 1rem;border-radius:6px;font-size:.875rem;margin-bottom:1rem;"></div>
+    <div id="sec2faStatus" style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem;">
+      <div>
+        <div style="font-weight:700;font-size:.9375rem;">Two-Factor Authentication</div>
+        <div id="sec2faLabel" style="font-size:.8125rem;margin-top:.25rem;"></div>
+      </div>
+      <div id="sec2faActions"></div>
+    </div>
+    <div id="secSetupStep" style="display:none;">
+      <div style="font-weight:700;margin-bottom:.5rem;">Scan this QR code</div>
+      <p style="font-size:.8125rem;color:var(--muted);margin-bottom:1rem;">Open <strong>Google Authenticator</strong>, <strong>Authy</strong>, or any authenticator app and scan the QR code below.</p>
+      <div style="text-align:center;margin-bottom:1rem;">
+        <img id="secQrImg" src="" alt="QR Code" style="border-radius:8px;width:200px;height:200px;background:#fff;padding:8px;">
+      </div>
+      <details style="margin-bottom:1rem;">
+        <summary style="font-size:.8125rem;color:var(--muted);cursor:pointer;">Can't scan? Enter code manually</summary>
+        <div id="secManualCode" style="font-family:monospace;font-size:.9375rem;font-weight:700;letter-spacing:.15em;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:.75rem;margin-top:.5rem;text-align:center;word-break:break-all;"></div>
+      </details>
+      <label style="display:block;font-size:.8125rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.375rem;">Enter the 6-digit code to confirm</label>
+      <input type="text" id="secConfirmCode" inputmode="numeric" maxlength="6" placeholder="000000"
+             style="display:block;width:100%;padding:.625rem .875rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:1.5rem;font-weight:700;letter-spacing:.4rem;text-align:center;margin-bottom:1rem;">
+      <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+        <button class="btn btn-outline" onclick="secCancelSetup()">Cancel</button>
+        <button class="btn btn-primary" onclick="secConfirm2FA()">Activate 2FA</button>
+      </div>
+    </div>
+    <div id="secDisableStep" style="display:none;">
+      <div style="font-weight:700;margin-bottom:.5rem;color:#fca5a5;">Disable Two-Factor Authentication</div>
+      <p style="font-size:.8125rem;color:var(--muted);margin-bottom:1rem;">Enter your current password to confirm you want to disable 2FA.</p>
+      <label style="display:block;font-size:.8125rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.375rem;">Your Password</label>
+      <input type="password" id="secDisablePassword"
+             style="display:block;width:100%;padding:.625rem .875rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:1rem;margin-bottom:1rem;">
+      <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+        <button class="btn btn-outline" onclick="secCancelDisable()">Cancel</button>
+        <button class="btn btn-danger" onclick="secDisable2FA()">Disable 2FA</button>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:.5rem;">
+      <button class="btn btn-outline" onclick="closeSecModal()">Close</button>
+    </div>
+  </div>
+</div>
 
 <!-- Change Password Modal -->
 <div id="cpModalOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center;">
@@ -532,6 +581,7 @@
     const { user } = await r.json();
     if (user.role !== 'admin') return window.location.href = '/converter';
     currentUser = user;
+    window._twoFaEnabled = !!user.totp_enabled;
     document.getElementById('navUsername').textContent = user.username;
     loadData();
   })();
@@ -624,7 +674,7 @@
             <div class="user-cell">
               <div class="avatar" style="background:${color}20;color:${color}">${initials}</div>
               <div class="user-cell-info">
-                <strong>${esc(u.username)}${isSelf ? ' <span style="color:var(--accent);font-weight:400;font-size:.7rem">(you)</span>' : ''}</strong>
+                <strong>${esc(u.username)}${isSelf ? ' <span style="color:var(--accent);font-weight:400;font-size:.7rem">(you)</span>' : ''}${u.totp_enabled ? ' <span style="font-size:.65rem;font-weight:700;background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.4);border-radius:4px;padding:.1rem .35rem;vertical-align:middle;">2FA</span>' : ''}</strong>
                 <span>${esc(u.email)}</span>
               </div>
             </div>
@@ -639,6 +689,11 @@
                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path d="M12 15v2m0 0v2m0-2h2m-2 0h-2M17 11V7A5 5 0 007 7v4M5 11h14a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 Reset PW
               </button>
+              ${u.totp_enabled ? `
+              <button class="btn btn-warn btn-sm" title="Reset 2FA" onclick="reset2FA(${u.id},'${esc(u.username)}')">
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Reset 2FA
+              </button>` : ''}
               ${!isSelf ? `
                 ${u.status === 'active'
                   ? `<button class="btn btn-warn btn-sm" title="Suspend account" onclick="suspendUser(${u.id},'${esc(u.username)}')">
@@ -659,6 +714,16 @@
           </td>
         </tr>`;
     }).join('');
+  }
+
+  // ── Suspend / Activate ───────────────────────────────────────────────────────
+  // ── Reset 2FA ─────────────────────────────────────────────────────────────────
+  async function reset2FA(id, username) {
+    if (!confirm(`Reset 2FA for "${username}"?\n\nThis will disable their two-factor authentication. They will be able to log in with just their password until they set it up again.`)) return;
+    const res  = await fetch(`/api/admin/users/${id}/reset-2fa`, { method: 'POST' });
+    const data = await res.json();
+    setUsersAlert(res.ok ? 'success' : 'error', data.message || data.error);
+    if (res.ok) { await loadData(); renderUsersTable(); }
   }
 
   // ── Suspend / Activate ───────────────────────────────────────────────────────
@@ -912,6 +977,112 @@
     await fetch('/api/auth/logout', { method: 'POST' });
     window.location.href = '/';
   });
+
+  // ── Security / 2FA Modal ────────────────────────────────────────────────────
+  const secOverlay = document.getElementById('secModalOverlay');
+
+  function openSecModal() {
+    document.getElementById('secAlert').style.display = 'none';
+    document.getElementById('secSetupStep').style.display = 'none';
+    document.getElementById('secDisableStep').style.display = 'none';
+    renderSecStatus();
+    secOverlay.style.display = 'flex';
+  }
+  function closeSecModal() { secOverlay.style.display = 'none'; }
+  secOverlay.addEventListener('click', e => { if (e.target === secOverlay) closeSecModal(); });
+  document.getElementById('securityBtn').addEventListener('click', openSecModal);
+
+  function renderSecStatus() {
+    const enabled = window._twoFaEnabled;
+    document.getElementById('sec2faLabel').innerHTML = enabled
+      ? '<span style="color:#22c55e;font-weight:700;">✔ Enabled</span>'
+      : '<span style="color:#94a3b8;">Not enabled</span>';
+    document.getElementById('sec2faActions').innerHTML = enabled
+      ? '<button class="btn btn-danger btn-sm" onclick="secShowDisable()">Disable</button>'
+      : '<button class="btn btn-outline btn-sm" onclick="secStartSetup()">Set Up</button>';
+  }
+
+  function secShowAlert(msg, type) {
+    const el = document.getElementById('secAlert');
+    el.textContent = msg;
+    el.style.display = 'block';
+    if (type === 'success') {
+      el.style.cssText = 'display:block;background:rgba(34,197,94,.15);border:1px solid #22c55e;color:#22c55e;padding:.75rem 1rem;border-radius:6px;font-size:.875rem;margin-bottom:1rem;';
+    } else {
+      el.style.cssText = 'display:block;background:rgba(239,68,68,.15);border:1px solid #ef4444;color:#ef4444;padding:.75rem 1rem;border-radius:6px;font-size:.875rem;margin-bottom:1rem;';
+    }
+  }
+
+  async function secStartSetup() {
+    document.getElementById('secAlert').style.display = 'none';
+    document.getElementById('sec2faStatus').style.display = 'none';
+    document.getElementById('secSetupStep').style.display = 'block';
+    document.getElementById('secConfirmCode').value = '';
+    const res = await fetch('/api/auth/2fa/setup', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) return secShowAlert(data.error || 'Setup failed.', 'error');
+    document.getElementById('secQrImg').src = data.qrCode;
+    document.getElementById('secManualCode').textContent = data.secret;
+    document.getElementById('secConfirmCode').focus();
+  }
+
+  function secCancelSetup() {
+    document.getElementById('sec2faStatus').style.display = 'flex';
+    document.getElementById('secSetupStep').style.display = 'none';
+  }
+
+  async function secConfirm2FA() {
+    const code = document.getElementById('secConfirmCode').value.replace(/\s/g, '');
+    if (!code || code.length !== 6) return secShowAlert('Enter the 6-digit code from your app.', 'error');
+    const res = await fetch('/api/auth/2fa/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      document.getElementById('secConfirmCode').value = '';
+      return secShowAlert(data.error || 'Verification failed.', 'error');
+    }
+    window._twoFaEnabled = true;
+    document.getElementById('sec2faStatus').style.display = 'flex';
+    document.getElementById('secSetupStep').style.display = 'none';
+    renderSecStatus();
+    secShowAlert('2FA is now enabled on your account!', 'success');
+  }
+
+  function secShowDisable() {
+    document.getElementById('secAlert').style.display = 'none';
+    document.getElementById('sec2faStatus').style.display = 'none';
+    document.getElementById('secDisableStep').style.display = 'block';
+    document.getElementById('secDisablePassword').value = '';
+    document.getElementById('secDisablePassword').focus();
+  }
+
+  function secCancelDisable() {
+    document.getElementById('sec2faStatus').style.display = 'flex';
+    document.getElementById('secDisableStep').style.display = 'none';
+  }
+
+  async function secDisable2FA() {
+    const password = document.getElementById('secDisablePassword').value;
+    if (!password) return secShowAlert('Enter your password to confirm.', 'error');
+    const res = await fetch('/api/auth/2fa/disable', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      document.getElementById('secDisablePassword').value = '';
+      return secShowAlert(data.error || 'Failed to disable 2FA.', 'error');
+    }
+    window._twoFaEnabled = false;
+    document.getElementById('sec2faStatus').style.display = 'flex';
+    document.getElementById('secDisableStep').style.display = 'none';
+    renderSecStatus();
+    secShowAlert('2FA has been disabled.', 'success');
+  }
 
   // ── Change Password ───────────────────────────────────────────────────────────
   const cpOverlay = document.getElementById('cpModalOverlay');
