@@ -261,9 +261,27 @@
   <div class="nav-actions">
     <span class="nav-user">Signed in as <strong id="navUsername">…</strong></span>
     <a class="btn btn-outline" href="/converter">Converter</a>
+    <button class="btn btn-outline" id="changePassBtn">Change Password</button>
     <button class="btn btn-danger" id="logoutBtn">Sign Out</button>
   </div>
 </nav>
+
+<!-- Change Password Modal -->
+<div id="cpModalOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:2rem;width:360px;max-width:95vw;">
+    <h3 style="margin-bottom:1.25rem;">Change Password</h3>
+    <div id="cpAlert" class="alert" style="margin-bottom:1rem;"></div>
+    <label style="display:block;font-size:.8125rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.375rem;">Current Password</label>
+    <input type="password" id="cpCurrent" style="display:block;width:100%;padding:.625rem .875rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:1rem;margin-bottom:1rem;">
+    <label style="display:block;font-size:.8125rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.375rem;">New Password</label>
+    <input type="password" id="cpNew" style="display:block;width:100%;padding:.625rem .875rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:1rem;margin-bottom:.375rem;">
+    <p style="font-size:.75rem;color:var(--muted);margin-bottom:1.25rem;">Min 8 chars, one uppercase, one number.</p>
+    <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="closeCpModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitChangePassword()">Save</button>
+    </div>
+  </div>
+</div>
 
 <div class="layout">
   <!-- Sidebar -->
@@ -894,6 +912,40 @@
     await fetch('/api/auth/logout', { method: 'POST' });
     window.location.href = '/';
   });
+
+  // ── Change Password ───────────────────────────────────────────────────────────
+  const cpOverlay = document.getElementById('cpModalOverlay');
+  document.getElementById('changePassBtn').addEventListener('click', () => {
+    document.getElementById('cpCurrent').value = '';
+    document.getElementById('cpNew').value = '';
+    document.getElementById('cpAlert').className = 'alert';
+    cpOverlay.style.display = 'flex';
+  });
+  function closeCpModal() { cpOverlay.style.display = 'none'; }
+  cpOverlay.addEventListener('click', e => { if (e.target === cpOverlay) closeCpModal(); });
+
+  async function submitChangePassword() {
+    const cpAlert = document.getElementById('cpAlert');
+    cpAlert.className = 'alert';
+    const currentPassword = document.getElementById('cpCurrent').value;
+    const newPassword     = document.getElementById('cpNew').value;
+
+    const res = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      cpAlert.textContent = 'Password changed successfully!';
+      cpAlert.style.cssText = 'display:block;background:rgba(34,197,94,.15);border:1px solid var(--success);color:var(--success);padding:.75rem 1rem;border-radius:6px;margin-bottom:1rem;';
+      setTimeout(closeCpModal, 1500);
+    } else {
+      cpAlert.textContent = data.error || 'Failed to change password.';
+      cpAlert.style.cssText = 'display:block;background:rgba(239,68,68,.15);border:1px solid var(--error);color:var(--error);padding:.75rem 1rem;border-radius:6px;margin-bottom:1rem;';
+    }
+  }
 </script>
 </body>
 </html>
