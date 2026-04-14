@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unit Converter</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f172a;
+      --surface:  #1e293b;
+      --surface2: #263348;
+      --border:   #334155;
+      --accent:   #3b82f6;
+      --accent-h: #2563eb;
+      --text:     #f1f5f9;
+      --muted:    #94a3b8;
+      --error:    #ef4444;
+      --success:  #22c55e;
+      --radius:   10px;
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: var(--text);
+    }
+
+    /* ── Navbar ── */
+    nav {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+    }
+    .nav-brand { display: flex; align-items: center; gap: .625rem; font-weight: 700; font-size: 1.1rem; }
+    .nav-brand svg { width: 28px; height: 28px; }
+    .nav-actions { display: flex; align-items: center; gap: .75rem; }
+    .nav-user { color: var(--muted); font-size: .875rem; }
+    .nav-user strong { color: var(--text); }
+
+    .btn { display: inline-flex; align-items: center; gap: .375rem; padding: .4rem .875rem;
+           border-radius: 6px; font-size: .875rem; font-weight: 600; cursor: pointer;
+           border: 1px solid transparent; transition: background .15s; }
+    .btn-outline { background: transparent; border-color: var(--border); color: var(--text); }
+    .btn-outline:hover { background: var(--surface2); }
+    .btn-danger  { background: transparent; border-color: #7f1d1d; color: #fca5a5; }
+    .btn-danger:hover  { background: rgba(239,68,68,.1); }
+
+    /* ── Main ── */
+    main {
+      max-width: 560px;
+      margin: 3rem auto;
+      padding: 0 1rem;
+    }
+
+    h2 { font-size: 1.75rem; font-weight: 700; margin-bottom: .375rem; }
+    .subtitle { color: var(--muted); margin-bottom: 2rem; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      box-shadow: 0 10px 30px rgba(0,0,0,.3);
+    }
+
+    /* Direction toggle */
+    .direction-row {
+      display: flex;
+      gap: .5rem;
+      margin-bottom: 1.5rem;
+    }
+    .dir-btn {
+      flex: 1; padding: .6rem; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--muted); font-size: .9rem; font-weight: 600;
+      cursor: pointer; transition: all .15s; text-align: center;
+    }
+    .dir-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    label {
+      display: block; font-size: .8125rem; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .05em; margin-bottom: .375rem;
+    }
+
+    .input-wrap { position: relative; margin-bottom: 1.25rem; }
+    .input-wrap input {
+      display: block; width: 100%; padding: .75rem 3rem .75rem 1rem;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); font-size: 1.125rem; transition: border-color .15s;
+    }
+    .input-wrap input:focus { outline: none; border-color: var(--accent); }
+    .input-unit {
+      position: absolute; right: .875rem; top: 50%; transform: translateY(-50%);
+      color: var(--muted); font-size: .875rem; font-weight: 700; pointer-events: none;
+    }
+
+    .convert-btn {
+      width: 100%; padding: .8rem;
+      background: var(--accent); color: #fff; border: none; border-radius: 6px;
+      font-size: 1rem; font-weight: 700; cursor: pointer; transition: background .15s;
+      display: flex; align-items: center; justify-content: center; gap: .5rem;
+    }
+    .convert-btn:hover { background: var(--accent-h); }
+
+    /* Result box */
+    .result-box {
+      margin-top: 1.5rem; padding: 1.25rem 1.5rem;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+      display: none;
+    }
+    .result-box.visible { display: block; }
+    .result-label { font-size: .8125rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: .375rem; }
+    .result-value { font-size: 2rem; font-weight: 800; color: var(--accent); }
+    .result-unit  { font-size: 1rem; color: var(--muted); margin-left: .25rem; }
+    .result-formula { margin-top: .625rem; font-size: .8125rem; color: var(--muted); font-family: monospace; }
+
+    .alert { padding: .75rem 1rem; border-radius: 6px; font-size: .875rem; margin-top: 1rem; display: none; }
+    .alert.error   { background: rgba(239,68,68,.15); border: 1px solid var(--error); color: var(--error); }
+    .alert.visible { display: block; }
+
+    /* Quick reference */
+    .quick-ref { margin-top: 2rem; }
+    .quick-ref h3 { font-size: .875rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: .75rem; }
+    .quick-ref table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+    .quick-ref th, .quick-ref td { padding: .5rem .75rem; border-bottom: 1px solid var(--border); }
+    .quick-ref th { color: var(--muted); font-weight: 600; text-align: left; }
+    .quick-ref td { color: var(--text); }
+    .quick-ref tr:last-child td { border-bottom: none; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">
+    <svg viewBox="0 0 48 48" fill="none"><rect width="48" height="48" rx="12" fill="#3b82f6"/>
+      <path d="M14 24h20M28 18l6 6-6 6" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M20 18l-6 6 6 6" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Unit Converter
+  </div>
+  <div class="nav-actions">
+    <span class="nav-user">Signed in as <strong id="navUsername">…</strong></span>
+    <button class="btn btn-outline" id="changePassBtn">Change Password</button>
+    <a id="adminLink" class="btn btn-outline" href="/admin" style="display:none">Admin Portal</a>
+    <button class="btn btn-danger" id="logoutBtn">Sign Out</button>
+  </div>
+</nav>
+
+<main>
+  <h2>Unit Converter</h2>
+  <p class="subtitle">Convert between centimeters and inches instantly.</p>
+
+  <div class="card">
+    <div class="direction-row">
+      <button class="dir-btn active" id="dirCmIn" onclick="setDirection('cm','in')">cm → inches</button>
+      <button class="dir-btn"        id="dirInCm" onclick="setDirection('in','cm')">inches → cm</button>
+    </div>
+
+    <label id="inputLabel">Value in centimeters (cm)</label>
+    <div class="input-wrap">
+      <input type="number" id="valueInput" placeholder="0" min="0" step="any">
+      <span class="input-unit" id="inputUnit">cm</span>
+    </div>
+
+    <button class="convert-btn" id="convertBtn">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+        <path d="M4 12h16M14 6l6 6-6 6" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Convert
+    </button>
+
+    <div class="alert error" id="alertEl"></div>
+
+    <div class="result-box" id="resultBox">
+      <div class="result-label">Result</div>
+      <div>
+        <span class="result-value" id="resultValue"></span>
+        <span class="result-unit"  id="resultUnit"></span>
+      </div>
+      <div class="result-formula" id="resultFormula"></div>
+    </div>
+  </div>
+
+  <div class="quick-ref card" style="margin-top:1.5rem; padding:1.5rem;">
+    <h3>Quick Reference</h3>
+    <table>
+      <thead><tr><th>Centimeters</th><th>Inches</th></tr></thead>
+      <tbody>
+        <tr><td>1 cm</td><td>0.3937 in</td></tr>
+        <tr><td>2.54 cm</td><td>1 in (exact)</td></tr>
+        <tr><td>30 cm</td><td>11.811 in</td></tr>
+        <tr><td>100 cm (1 m)</td><td>39.3701 in</td></tr>
+        <tr><td>182.88 cm (6 ft)</td><td>72 in</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<!-- Change Password Modal -->
+<div id="modalOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:none;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:2rem;width:360px;max-width:95vw;">
+    <h3 style="margin-bottom:1.25rem;">Change Password</h3>
+    <div id="cpAlert" class="alert" style="margin-bottom:1rem;"></div>
+    <label>Current Password</label>
+    <input type="password" id="cpCurrent" style="width:100%;padding:.625rem .875rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:1rem;margin-bottom:1rem;">
+    <label>New Password</label>
+    <input type="password" id="cpNew" style="width:100%;padding:.625rem .875rem;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:1rem;margin-bottom:.375rem;">
+    <p style="font-size:.75rem;color:var(--muted);margin-bottom:1.25rem;">Min 8 chars, one uppercase, one number.</p>
+    <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn" style="background:var(--accent);color:#fff;border-color:var(--accent);" onclick="submitChangePassword()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let currentFrom = 'cm';
+
+  // ── Auth check ──────────────────────────────────────────────────────────────
+  (async () => {
+    const r = await fetch('/api/auth/me');
+    if (!r.ok) return window.location.href = '/';
+    const { user } = await r.json();
+    document.getElementById('navUsername').textContent = user.username;
+    if (user.role === 'admin') document.getElementById('adminLink').style.display = 'inline-flex';
+  })();
+
+  // ── Direction ───────────────────────────────────────────────────────────────
+  function setDirection(from, to) {
+    currentFrom = from;
+    document.getElementById('dirCmIn').classList.toggle('active', from === 'cm');
+    document.getElementById('dirInCm').classList.toggle('active', from === 'in');
+    document.getElementById('inputLabel').textContent = from === 'cm' ? 'Value in centimeters (cm)' : 'Value in inches (in)';
+    document.getElementById('inputUnit').textContent  = from;
+    document.getElementById('resultBox').classList.remove('visible');
+    document.getElementById('alertEl').className = 'alert error';
+    document.getElementById('valueInput').value = '';
+    document.getElementById('valueInput').focus();
+  }
+
+  // ── Convert ─────────────────────────────────────────────────────────────────
+  document.getElementById('convertBtn').addEventListener('click', convert);
+  document.getElementById('valueInput').addEventListener('keydown', e => { if (e.key === 'Enter') convert(); });
+
+  async function convert() {
+    const alertEl  = document.getElementById('alertEl');
+    const resultBox = document.getElementById('resultBox');
+    alertEl.className = 'alert error';
+    resultBox.classList.remove('visible');
+
+    const raw = document.getElementById('valueInput').value;
+    if (raw === '' || raw === null) {
+      alertEl.textContent = 'Please enter a value.';
+      alertEl.className = 'alert error visible';
+      return;
+    }
+
+    const res = await fetch('/api/convert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: parseFloat(raw), from: currentFrom }),
+    });
+
+    if (res.status === 401) return window.location.href = '/';
+
+    const data = await res.json();
+    if (!res.ok) {
+      alertEl.textContent = data.error;
+      alertEl.className = 'alert error visible';
+      return;
+    }
+
+    document.getElementById('resultValue').textContent  = data.result.toLocaleString('en-US', { maximumFractionDigits: 6 });
+    document.getElementById('resultUnit').textContent   = data.toUnit;
+    document.getElementById('resultFormula').textContent = data.formula;
+    resultBox.classList.add('visible');
+  }
+
+  // ── Logout ──────────────────────────────────────────────────────────────────
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/';
+  });
+
+  // ── Change Password Modal ────────────────────────────────────────────────────
+  const overlay = document.getElementById('modalOverlay');
+  document.getElementById('changePassBtn').addEventListener('click', () => {
+    overlay.style.display = 'flex';
+    document.getElementById('cpCurrent').value = '';
+    document.getElementById('cpNew').value = '';
+    document.getElementById('cpAlert').className = 'alert';
+  });
+  function closeModal() { overlay.style.display = 'none'; }
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+
+  async function submitChangePassword() {
+    const cpAlert = document.getElementById('cpAlert');
+    cpAlert.className = 'alert';
+    const currentPassword = document.getElementById('cpCurrent').value;
+    const newPassword     = document.getElementById('cpNew').value;
+
+    const res = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      cpAlert.textContent = 'Password changed successfully!';
+      cpAlert.className = 'alert visible' + (res.ok ? ' success' : ' error');
+      cpAlert.style.background = 'rgba(34,197,94,.15)';
+      cpAlert.style.borderColor = 'var(--success)';
+      cpAlert.style.color = 'var(--success)';
+      setTimeout(closeModal, 1500);
+    } else {
+      cpAlert.textContent = data.error;
+      cpAlert.className = 'alert error visible';
+    }
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+node_modules/
+db/app.db
+db/app.db-shm
+db/app.db-wal
+.env
+*.log
+.claude/
