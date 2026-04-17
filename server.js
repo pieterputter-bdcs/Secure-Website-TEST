@@ -39,6 +39,17 @@ function pageAuth(req, res, next) {
 }
 
 const app  = express();
+// ── CORS: allow the HR Management app (file:// origin) ──────────────
+app.use((req, res, next) => {
+  const origin = req.headers.origin || 'null';
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+// ────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 
 const isProd = process.env.NODE_ENV === 'production';
